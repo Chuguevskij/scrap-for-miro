@@ -1,6 +1,6 @@
 """Координация обхода страницы каталога и товарных страниц."""
 
-from .extractors import parse_title
+from .extractors import parse_product_title
 from .fetcher import HttpPageFetcher, LocalFileFetcher, PageFetcher
 from .filters import unique_images
 from .models import Product, ScrapeResult
@@ -22,7 +22,7 @@ class Scraper:
         is_local = not url.startswith(("http://", "https://"))
         fetcher = self.fetcher or (LocalFileFetcher() if is_local else HttpPageFetcher())
         page = fetcher.fetch(url)
-        title = parse_title(page.html) or page.final_url
+        title = parse_product_title(page.html) or page.final_url
         refs = [] if PRODUCT_PAGE_URL.search(page.final_url) else discover_products(page, fetcher)
         if not refs:
             return ScrapeResult(
@@ -37,7 +37,7 @@ class Scraper:
         for ref in refs[:limit or None]:
             try:
                 product_page = fetcher.fetch(ref.url)
-                product_title = parse_title(product_page.html) or ref.title or title
+                product_title = parse_product_title(product_page.html) or ref.title or title
                 products.append(Product(
                     ref.url,
                     product_title,

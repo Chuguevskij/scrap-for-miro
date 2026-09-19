@@ -7,6 +7,9 @@ import urllib.parse
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 SIZE_PARAMETERS = {"w", "width", "size"}
 SIZE_SUFFIX = re.compile(r"_\d+x\d*(?=\.[A-Za-z0-9]+$)")
+# Часть CDN складывает одно и то же фото в каталоги вида images/, images/bimages/, images/b2images/.
+RESOLUTION_DIR = re.compile(r"(?:^|/)b\d*images(?=/)", re.I)
+RESOLUTION_RANK = re.compile(r"/b(\d*)images/", re.I)
 
 
 def absolute_url(raw_url: str, base_url: str) -> str:
@@ -18,15 +21,26 @@ def absolute_url(raw_url: str, base_url: str) -> str:
     return urllib.parse.urljoin(base_url, raw_url)
 
 
+def resolution_rank(url: str) -> int:
+    """Разрешение из имени каталога CDN: bimages < b2images < b3images."""
+    match = RESOLUTION_RANK.search(urllib.parse.urlsplit(url).path)
+    return int(match.group(1) or 1) if match else 0
+
+
+def _single_resolution_path(path: str) -> str:
+    """Убрать из пути сегмент-метку разрешения, чтобы версии одного фото стали одним путём."""
+    return RESOLUTION_DIR.sub("", path, count=1)
+
+
 def normalized_image_key(url: str) -> str:
-    """Убрать CDN-параметры размера, сохранив остальные параметры ссылки."""
+    """Убрать CDN-параметры и метки разрешения, сохранив остальные параметры ссылки."""
     parsed = urllib.parse.urlsplit(url)
     query = [
         (key, value)
         for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
         if key.lower() not in SIZE_PARAMETERS
     ]
-    path = SIZE_SUFFIX.sub("", parsed.path)
+    path = SIZE_SUFFIX.sub("", _single_resolution_path(parsed.path))
     return urllib.parse.urlunsplit(
         (parsed.scheme.lower(), parsed.netloc.lower(), path, urllib.parse.urlencode(query), "")
     ).rstrip("?&")

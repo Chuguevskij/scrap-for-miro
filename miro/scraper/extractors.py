@@ -31,40 +31,69 @@ def best_srcset(value: str) -> str | None:
 
 
 class HtmlImageParser(HTMLParser):
-    """Собирает картинки из стандартных и lazy-loading атрибутов."""
+    """Собирает картинки из стандартных и lazy-loading атрибутов.
+
+    Отдельно помечает картинки внутри блоков галереи: на многих витринах фото
+    товара дублируются в миниатюрах, зуме и похожих товарах, и только галерея
+    даёт ровно тот набор ракурсов, который показывает сайт.
+    """
+
+    GALLERY = re.compile(
+        r"gallery|slider|swiper|slick|product-images|product-photo|product-preview|zoom", re.I
+    )
+    OUTSIDE = re.compile(
+        r"nav|header|footer|menu|breadcrumb|sidebar|filter|form|widget|recommend|related|similar",
+        re.I,
+    )
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.title = ""
         self.images: list[tuple[str, str]] = []
         self._in_title = False
+        self._in_gallery: list[bool] = []
+
+    def _record(self, url, source):
+        gallery = bool(self._in_gallery and self._in_gallery[-1])
+        self.images.append((url, "gallery" if gallery else source))
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
+        classes = (attributes.get("class") or "") + " " + (attributes.get("id") or "")
+        inside = (
+            False
+            if self.OUTSIDE.search(classes)
+            else bool(self._in_gallery and self._in_gallery[-1]) or bool(self.GALLERY.search(classes))
+        )
+        self._in_gallery.append(inside)
         if tag == "title":
             self._in_title = True
         if tag == "img":
             for key in SRCSET_ATTRIBUTES:
                 if attributes.get(key) and (url := best_srcset(attributes[key])):
-                    self.images.append((url, "srcset"))
+                    self._record(url, "srcset")
             for key in IMAGE_ATTRIBUTES:
                 if attributes.get(key):
-                    self.images.append((attributes[key], key))
+                    self._record(attributes[key], key)
+            if attributes.get("data-lazy"):
+                self._record(attributes["data-lazy"], "data-lazy")
         if tag == "source":
             for key in SRCSET_ATTRIBUTES[:2]:
                 if attributes.get(key) and (url := best_srcset(attributes[key])):
-                    self.images.append((url, "source"))
+                    self._record(url, "source")
         if tag == "link" and "image" in (attributes.get("as") or "") and attributes.get("href"):
-            self.images.append((attributes["href"], "preload"))
+            self._record(attributes["href"], "preload")
         if tag == "meta" and attributes.get("property", "").lower() in {"og:image", "og:image:url"}:
             if attributes.get("content"):
-                self.images.append((attributes["content"], "og:image"))
+                self._record(attributes["content"], "og:image")
         for url in re.findall(r"url\(['\"]?([^'\")]+)", attributes.get("style") or ""):
-            self.images.append((url, "style"))
+            self._record(url, "style")
 
     def handle_endtag(self, tag):
         if tag == "title":
             self._in_title = False
+        if self._in_gallery:
+            self._in_gallery.pop()
 
     def handle_data(self, data):
         if self._in_title:
@@ -120,6 +149,16 @@ def parse_title(page_html: str) -> str:
         return ""
     title = re.sub(r"\s+", " ", html.unescape(match.group(1))).strip()
     return re.split(r"[|]", title, maxsplit=1)[0].strip()[:80]
+
+
+def parse_product_title(page_html: str) -> str:
+    """Название товара: h1 точнее, чем title, где обычно ещё и цена с магазином."""
+    for match in re.finditer(r"<h1\b[^>]*>(.*?)</h1\s*>", page_html, re.I | re.S):
+        text = re.sub(r"<[^>]+>", " ", match.group(1))
+        text = re.sub(r"\s+", " ", html.unescape(text)).strip(" -–—|·")
+        if len(text) > 2:
+            return text[:70].strip()
+    return parse_title(page_html)
 
 
 def parse_html_images(page_html: str, base_url: str) -> list[ImageCandidate]:

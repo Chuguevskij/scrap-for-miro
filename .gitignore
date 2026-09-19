@@ -1,0 +1,69 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C / Cython build artifacts
+*.c
+*.pyx
+*.pxd
+*.pxi
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+cython_debug/
+cython_output/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / linting / type checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Packaging
+wheels/
+pip-wheel-metadata/
+MANIFEST
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
